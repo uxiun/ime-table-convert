@@ -66,8 +66,8 @@ fn main() -> io::Result<()> {
 
   codes.sort();
 
-  json_array_write("json/cqkm+cj5-20902.json", &hanzis)?;
-  json_array_write("json/zi-spells-20902.json", &codes)?;
+  json_array_write("json/cqkm-cj5-21000.json", &hanzis)?;
+  json_array_write("json/zi-spells-21000.json", &codes)?;
 
   Ok(())
 }
