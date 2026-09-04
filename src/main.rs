@@ -2,48 +2,103 @@ use std::{
   cmp::Ordering,
   collections::HashMap,
   fs::{self, OpenOptions, read_to_string},
+  hash::Hash,
   io::{self, BufWriter, Write},
 };
 
+use ime_table_convert::hashmap_reverse;
 use pinyin::ToPinyinMulti;
 use serde::{Deserialize, Serialize};
+
+const CQKM_FORM_LAYOUT: &str = "
+  wa em rp tn     yb uy ih og
+  sd dk fi gc     hv ju kj lf
+  zq xr cw .e  bt ,x mo nl vs
+";
+
+const CQKM_INITIAL_LAYOUT: &str = "
+  wp eb rf tm    yy ux ij oq
+  st dd fl gn    hr ju ki lo
+  zk xg ch .a be ,w ms nz vc
+";
+
+const CJ5_LAYOUT: &str =
+  "az bq cg dh et fn gu hv ii jb km lr ms ne of pw qx rl so tp ud vc wy xk ya zj";
+//                           v                    v
+// "az bq cg dh et fn gu hv ii jx km lr ms ne of pw qb rl so tp ud vc wy xk ya zj";
+// 参照元がそもそもb/qの綴が入れ替わっちゃってる状態だったっぽい
+
+fn to_char_dict(char_pairs_str: &str) -> HashMap<char, char> {
+  char_pairs_str
+    .split_whitespace()
+    .filter_map(|word| {
+      let mut cs = word.chars();
+      match (cs.next(), cs.next()) {
+        (Some(i), Some(k)) => Some((i, k)),
+        _ => None,
+      }
+    })
+    .collect()
+}
 
 fn main() -> io::Result<()> {
   let res = get_hanzis(
     &["json/cqkm-char.json", "json/cqkm-char-extra.json"],
-    &["yong/cj5-20902.txt"],
+    &[("Cangjie5/Cangjie5_special.txt", false)],
   );
 
   if let Err(e) = &res {
     println!("{}", e)
   }
-  let mut hanzis = res.unwrap();
-  dbg!(hanzis.len());
-  let cqkm_count = hanzis.iter().filter(|z| z.cqkm_form.is_some()).count();
+  let mut hans = res.unwrap();
+  dbg!(hans.len());
+  let cqkm_count = hans.iter().filter(|z| z.cqkm_form.is_some()).count();
   dbg!(cqkm_count);
-  hanzis.iter_mut().for_each(|z| z.fill_cqkm_initials());
+
+  let initial_layout = to_char_dict(CQKM_INITIAL_LAYOUT);
+  let form_layout = to_char_dict(CQKM_FORM_LAYOUT);
+  let cj5_layout = to_char_dict(CJ5_LAYOUT);
+
+  hans
+    .iter_mut()
+    .for_each(|z| z.fill_cqkm_initials(&initial_layout));
+  hans
+    .iter_mut()
+    .for_each(|h| h.apply_custom_layout(&cj5_layout, &initial_layout, &form_layout));
 
   for key in "qwertyuiopasdfghjkl;zxc.b,mnv".split("") {
-    let found = hanzis.iter().find(|z| z.cj5.iter().any(|s| s == key));
+    let found = hans.iter().find(|z| z.cj5.iter().any(|s| s == key));
     if let Some(z) = found {
       println!("{}: {}", key, z.zh);
     }
   }
 
-  let mut codes: Vec<Code> = hanzis.iter().flat_map(|z| z.codes()).collect();
+  run_stat(&hans);
+
+  let words_json: String = read_to_string("json/cqkm-word.json")?;
+  let words: Vec<CqkmWord> = serde_json::from_str(&words_json)?;
+  let mut words_counter: HashMap<char, u64> = HashMap::new();
+  count_map(&mut words_counter, &words, |w| w.zh.chars());
+
+  println!("\n\n-----run_stat_weighted-------");
+  run_stat_weighted(&hans, &words_counter);
+
+  // return Ok(());
+
+  let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.codes()).collect();
 
   let s = read_to_string("json/cqkm-char-shortcuts.json")?;
   let shortcuts: Vec<CqkmWord> = serde_json::from_str(&s)?;
   dbg!(shortcuts.len());
 
-  let xhs = XHS.into_iter().collect::<HashMap<&str, &str>>();
-  let hanzim: HashMap<&String, &Hanzi> = hanzis.iter().map(|z| (&z.zh, z)).collect();
+  let xhs = xhs_map(&initial_layout);
+  let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
 
   for short in shortcuts {
     let initial = &short.spell[0..1];
     let code = if "zcs".contains(initial) {
       let xh = format!("{initial}h");
-      if hanzim
+      if hanm
         .get(&short.zh)
         .map(|z| z.pinyins.iter().any(|p| p.starts_with(&xh)))
         .unwrap_or(false)
@@ -66,13 +121,153 @@ fn main() -> io::Result<()> {
 
   codes.sort();
 
-  json_array_write("json/cqkm-cj5-21000.json", &hanzis)?;
-  json_array_write("json/zi-spells-21000.json", &codes)?;
+  json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
+  json_array_write("json/Cangjie5_special_codes_custom.json", &codes)?;
 
   Ok(())
 }
 
+fn count_map<
+  U,
+  T: IntoIterator<Item = U>,
+  C: Eq + Hash,
+  X: IntoIterator<Item = C>,
+  F: Fn(U) -> X,
+>(
+  counter: &mut HashMap<C, u64>,
+  it: T,
+  get: F,
+) {
+  for item in it.into_iter() {
+    let cs = get(item);
+    for c in cs.into_iter() {
+      counter.entry(c).and_modify(|i| *i += 1).or_insert(1);
+    }
+  }
+}
+
+fn count_weighted<
+  C: Eq + Hash,
+  D: Eq + Hash,
+  T,
+  S: IntoIterator<Item = T>,
+  F: Fn(&T) -> C,
+  I: IntoIterator<Item = D>,
+  G: Fn(T) -> I,
+>(
+  weights: &HashMap<C, u64>,
+  counter: &mut HashMap<D, u64>,
+  src: S,
+  get_weight_key: F,
+  get_count_targets: G,
+) {
+  for item in src.into_iter() {
+    let w = *weights.get(&get_weight_key(&item)).unwrap_or(&1);
+    let ds = get_count_targets(item);
+    for d in ds.into_iter() {
+      counter.entry(d).and_modify(|i| *i += w).or_insert(w);
+    }
+  }
+}
+
+fn run_stat(hans: &[Hanzi]) {
+  let mut hans_cqkm_form: HashMap<char, u64> = HashMap::new();
+  let mut hans_cqkm_initial: HashMap<char, u64> = HashMap::new();
+  let mut hans_cj5: HashMap<char, u64> = HashMap::new();
+
+  for h in hans {
+    if let Some(form) = &h.cqkm_form {
+      char_count(&mut hans_cqkm_form, form.as_str());
+    }
+    char_count(&mut hans_cj5, h.cj5.join("").as_str());
+    char_count(&mut hans_cqkm_initial, h.cqkm_initials.join("").as_str());
+  }
+
+  println!("\nhans_cj5");
+  char_count_print(&hans_cj5);
+  println!("\nhans_cqkm_form");
+  char_count_print(&hans_cqkm_form);
+  println!("\nhans_cqkm_initial");
+  char_count_print(&hans_cqkm_initial);
+}
+fn run_stat_weighted(hans: &[Hanzi], weights: &HashMap<char, u64>) {
+  let mut hans_cqkm_form: HashMap<char, u64> = HashMap::new();
+  let mut hans_cqkm_initial: HashMap<char, u64> = HashMap::new();
+  let mut hans_cj5: HashMap<char, u64> = HashMap::new();
+
+  count_weighted(
+    weights,
+    &mut hans_cj5,
+    hans,
+    |h| h.zh.chars().next().unwrap(),
+    |h| h.cj5.join("").chars().collect::<Vec<_>>(),
+  );
+
+  count_weighted(
+    weights,
+    &mut hans_cqkm_form,
+    hans,
+    |h| h.zh.chars().next().unwrap(),
+    |h| {
+      h.cqkm_form
+        .clone()
+        .unwrap_or_default()
+        .chars()
+        .take(2)
+        .collect::<Vec<_>>()
+    },
+  );
+
+  count_weighted(
+    weights,
+    &mut hans_cqkm_initial,
+    hans,
+    |h| h.zh.chars().next().unwrap(),
+    |h| h.cqkm_initials.join("").chars().take(1).collect::<Vec<_>>(),
+  );
+
+  // for h in hans {
+  //   if let Some(form) = &h.cqkm_form {
+  //     char_count(&mut hans_cqkm_form, form.as_str());
+  //   }
+  //   char_count(&mut hans_cj5, h.cj5.join("").as_str());
+  //   char_count(&mut hans_cqkm_initial, h.cqkm_initials.join("").as_str());
+  // }
+
+  println!("\nhans_cj5");
+  char_count_print(&hans_cj5);
+  println!("\nhans_cqkm_form");
+  char_count_print(&hans_cqkm_form);
+  println!("\nhans_cqkm_initial");
+  char_count_print(&hans_cqkm_initial);
+}
+
+fn char_count_print(counter: &HashMap<char, u64>) {
+  let mut v = counter.iter().collect::<Vec<_>>();
+  let count_sum: u64 = v.iter().map(|(_, n)| **n).sum();
+
+  v.sort_by(|i, j| i.1.partial_cmp(j.1).expect("partial_cmp"));
+  for (c, x) in v {
+    let percent: f64 = *x as f64 * 100_f64 / count_sum as f64;
+    println!("{c}: ({:.2}%) {}", percent, x);
+  }
+}
+
+fn char_count(counter: &mut HashMap<char, u64>, s: &str) {
+  for c in s.chars() {
+    counter.entry(c).and_modify(|i| *i += 1).or_insert(1);
+  }
+}
+
 const XHS: [(&str, &str); 3] = [("zh", "i"), ("ch", "o"), ("sh", "u")];
+fn xhs_map(initial_layout: &HashMap<char, char>) -> HashMap<&str, char> {
+  let initial_mapper = hashmap_reverse(initial_layout);
+  XHS
+    .map(|(k, v)| (k, *initial_mapper.get(&v.chars().next().unwrap()).unwrap()))
+    .into_iter()
+    .collect()
+}
+
 fn json_array_write<T: Serialize>(path: &str, items: &[T]) -> io::Result<()> {
   let f = OpenOptions::new()
     .create(true)
@@ -206,6 +401,58 @@ impl PartialOrd for Hanzi {
 }
 
 impl Hanzi {
+  fn apply_custom_layout(
+    &mut self,
+    cj5_layout: &HashMap<char, char>,
+    initial_layout: &HashMap<char, char>,
+    form_layout: &HashMap<char, char>,
+  ) {
+    let cj5_mapper = hashmap_reverse(cj5_layout);
+    let initial_mapper = hashmap_reverse(initial_layout);
+    let form_mapper = hashmap_reverse(form_layout);
+
+    self.cqkm_initials = self
+      .cqkm_initials
+      .iter()
+      .filter_map(|i| {
+        let i1 = i
+          .chars()
+          .next()
+          .iter()
+          .flat_map(|i| initial_mapper.get(i))
+          .collect::<String>();
+        if i1.is_empty() {
+          println!("initial_layout.get({i}) returned None!");
+          None
+        } else {
+          Some(i1)
+        }
+      })
+      .collect();
+
+    self.cqkm_form = self.cqkm_form.as_ref().map(|s| {
+      let f = s
+        .chars()
+        .filter_map(|c| form_mapper.get(&c))
+        .collect::<String>();
+      if f.len() != s.len() {
+        panic!("cqkm_form convertion is imcomplete!: {:?}", self);
+      }
+      f
+    });
+
+    self.cj5.iter_mut().for_each(|codes| {
+      let f = codes
+        .chars()
+        .filter_map(|c| cj5_mapper.get(&c))
+        .collect::<String>();
+      if f.len() != codes.len() {
+        panic!("cj5 convertion is imcomplete! for code \"{codes}\"");
+      }
+      *codes = f
+    })
+  }
+
   fn codes(&self) -> Vec<Code> {
     let mut codes: Vec<Code> = self
       .cj5
@@ -272,8 +519,9 @@ impl Hanzi {
   //   Ok(())
   // }
 
-  fn fill_cqkm_initials(&mut self) {
-    let xhs = XHS.into_iter().collect::<HashMap<&str, &str>>();
+  fn fill_cqkm_initials(&mut self, _initial_layout: &HashMap<char, char>) {
+    // let xhs = xhs_map(initial_layout);
+    let xhs: HashMap<&str, &str> = XHS.into_iter().collect();
 
     let mut is = self
       .pinyins
@@ -295,7 +543,12 @@ impl Hanzi {
       }
     }
 
-    let replace_xhs = |initial: &&str| xhs.get(initial).unwrap_or(initial).to_string();
+    let replace_xhs = |initial: &&str| {
+      xhs
+        .get(initial)
+        .map(|c| c.to_string())
+        .unwrap_or(initial.to_string())
+    };
 
     if self.cqkm_initials.is_empty() {
       self.cqkm_initials.append(
@@ -328,7 +581,7 @@ impl Hanzi {
 
 fn get_hanzis(
   paths_cqkm_char: &[&'static str],
-  paths_cj5_yong: &[&'static str],
+  paths_cj5_yong_is_code_left: &[(&'static str, bool)],
 ) -> Result<Vec<Hanzi>, Box<dyn std::error::Error>> {
   let mut chars_cqkm: Vec<CqkmChar> = vec![];
   for path in paths_cqkm_char {
@@ -339,17 +592,19 @@ fn get_hanzis(
   let cqkm: HashMap<String, CqkmChar> = chars_cqkm.into_iter().map(|c| (c.zh.clone(), c)).collect();
 
   let mut cj5def: HashMap<String, Vec<String>> = HashMap::new();
-  for path in paths_cj5_yong {
+  for (path, is_code_left) in paths_cj5_yong_is_code_left {
     let s = fs::read_to_string(path)?;
     for line in s.lines() {
       let seps: Vec<&str> = line.split_whitespace().collect();
+      let code_i = if *is_code_left { 0 } else { 1 };
+      let zh_i = if *is_code_left { 1 } else { 0 };
       if seps.len() == 2
-        && seps[0].chars().all(|c| c.is_ascii_alphabetic())
-        && seps[1].chars().count() == 1
-        && seps[1].chars().all(|c| c.is_alphabetic())
+        && seps[code_i].chars().all(|c| c.is_ascii_alphabetic())
+        && seps[zh_i].chars().count() == 1
+      // && seps[1].chars().all(|c| c.is_alphabetic())
       {
-        let spell = seps[0].to_string();
-        let zh = seps[1].to_string();
+        let spell = seps[code_i].to_string();
+        let zh = seps[zh_i].to_string();
         cj5def
           .entry(zh)
           .and_modify(|v| {
@@ -379,7 +634,7 @@ fn get_hanzis(
         .collect();
 
       if pinyins.is_empty() {
-        return None
+        return None;
       }
 
       let h = match cqkm.get(&zh) {
