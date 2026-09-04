@@ -93,6 +93,13 @@ fn main() -> io::Result<()> {
 
   let xhs = xhs_map(&initial_layout);
   let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
+  let initial_mapper = hashmap_reverse(&initial_layout);
+
+  let initial_mapped = |original: &str| {
+    original.chars()
+      .filter_map(|c| initial_mapper.get(&c))
+      .collect::<String>()
+  };
 
   for short in shortcuts {
     let initial = &short.spell[0..1];
@@ -105,10 +112,10 @@ fn main() -> io::Result<()> {
       {
         format!("{}{}", xhs.get(xh.as_str()).unwrap(), &short.spell[1..])
       } else {
-        short.spell
+        initial_mapped(&short.spell)
       }
     } else {
-      short.spell
+      initial_mapped(&short.spell)
     };
 
     codes.push(Code {

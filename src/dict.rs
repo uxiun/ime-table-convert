@@ -12,16 +12,16 @@ struct ChDictWord {
   explanation: &'static str,
 }
 
-impl ChDictWord {
-  fn from_word_json<P: AsRef<Path>>(path: P) -> io::Result<Vec<ChDictWord>> {
-    // let file = File::open(path)?;
-    // let mut reader = BufReader::new(file);
+// impl ChDictWord {
+//   fn from_word_json<P: AsRef<Path>>(path: P) -> io::Result<Vec<ChDictWord>> {
+//     // let file = File::open(path)?;
+//     // let mut reader = BufReader::new(file);
 
-    let s = read_to_string(path)?;
-    let value: Value = serde_json::from_str(&s)?;
-    if let Array(words) = value {
-      words.into_iter()
-        .map(|w| )
-    }
-  }
-}
+//     let s = read_to_string(path)?;
+//     let value: Value = serde_json::from_str(&s)?;
+//     if let Array(words) = value {
+//       words.into_iter()
+//         .map(|w| )
+//     }
+//   }
+// }
