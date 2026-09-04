@@ -86,50 +86,79 @@ fn main() -> io::Result<()> {
   // return Ok(());
 
   // let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.codes()).collect();
-  let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.cqkm_xy_codes()).collect();
+  let mut codes: Vec<Code> = hans
+    .iter()
+    .flat_map(|z| {
+      let mut codes = z.codes();
+      codes.append(&mut z.cqkm_xy_codes());
+      codes
+    })
+    .collect();
+  // let mut codes: Vec<Code> = vec![];
 
-  // let s = read_to_string("json/cqkm-char-shortcuts.json")?;
-  // let shortcuts: Vec<CqkmWord> = serde_json::from_str(&s)?;
-  // dbg!(shortcuts.len());
+  let s = read_to_string("json/cqkm-char-shortcuts.json")?;
+  let shortcuts: Vec<CqkmWord> = serde_json::from_str(&s)?;
+  dbg!(shortcuts.len());
 
-  // let xhs = xhs_map(&initial_layout);
-  // let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
-  // let initial_mapper = hashmap_reverse(&initial_layout);
+  let xhs = xhs_map(&initial_layout);
+  let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
+  let initial_mapper = hashmap_reverse(&initial_layout);
+  let form_mapper = hashmap_reverse(&form_layout);
 
-  // let initial_mapped = |original: &str| {
-  //   original.chars()
-  //     .filter_map(|c| initial_mapper.get(&c))
-  //     .collect::<String>()
-  // };
+  let initial_mapped = |original: &str| {
+    original
+      .chars()
+      .filter_map(|c| initial_mapper.get(&c))
+      .collect::<String>()
+  };
 
-  // for short in shortcuts {
-  //   let initial = &short.spell[0..1];
-  //   let code = if "zcs".contains(initial) {
-  //     let xh = format!("{initial}h");
-  //     if hanm
-  //       .get(&short.zh)
-  //       .map(|z| z.pinyins.iter().any(|p| p.starts_with(&xh)))
-  //       .unwrap_or(false)
-  //     {
-  //       format!("{}{}", xhs.get(xh.as_str()).unwrap(), &short.spell[1..])
-  //     } else {
-  //       initial_mapped(&short.spell)
-  //     }
-  //   } else {
-  //     initial_mapped(&short.spell)
-  //   };
+  let form_mapped = |original: &str| {
+    original
+      .chars()
+      .filter_map(|c| form_mapper.get(&c))
+      .collect::<String>()
+  };
 
-  //   codes.push(Code {
-  //     zh: short.zh,
-  //     code,
-  //     schema: "cqkm".to_string(),
-  //     nth: 0,
-  //   });
-  // }
+  for short in shortcuts {
+    let initial = &short.spell[0..1];
+    let code = if "zcs".contains(initial) {
+      let xh = format!("{initial}h");
+      if hanm
+        .get(&short.zh)
+        .map(|z| z.pinyins.iter().any(|p| p.starts_with(&xh)))
+        .unwrap_or(false)
+      {
+        format!(
+          "{}{}",
+          xhs.get(xh.as_str()).unwrap(),
+          form_mapped(&short.spell[1..])
+        )
+      } else {
+        format!(
+          "{}{}",
+          initial_mapped(&short.spell[0..1]),
+          form_mapped(&short.spell[1..])
+        )
+      }
+    } else {
+      format!(
+        "{}{}",
+        initial_mapped(&short.spell[0..1]),
+        form_mapped(&short.spell[1..])
+      )
+    };
+
+    codes.push(Code {
+      zh: short.zh,
+      code,
+      schema: "cqkm".to_string(),
+      nth: 0,
+    });
+  }
 
   codes.sort();
 
-  // json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
+  json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
   json_array_write("json/Cangjie5_special_codes_cqkmxy.json", &codes)?;
 
   Ok(())
