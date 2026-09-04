@@ -7,7 +7,7 @@ use std::{
 };
 
 use ime_table_convert::hashmap_reverse;
-use pinyin::ToPinyinMulti;
+use pinyin::{ToPinyin, ToPinyinMulti};
 use serde::{Deserialize, Serialize};
 
 const CQKM_FORM_LAYOUT: &str = "
@@ -586,9 +586,10 @@ impl Hanzi {
   //   Ok(())
   // }
 
-  fn fill_cqkm_initials(&mut self, _initial_layout: &HashMap<char, char>) {
+  fn fill_cqkm_initials(&mut self, initial_layout: &HashMap<char, char>) {
     // let xhs = xhs_map(initial_layout);
     let xhs: HashMap<&str, &str> = XHS.into_iter().collect();
+    let initial_mapper = hashmap_reverse(&initial_layout);
 
     let mut is = self
       .pinyins
@@ -625,6 +626,20 @@ impl Hanzi {
           .collect(),
       );
     } else {
+      let xhs = xhs_map(&initial_layout);
+      let initials = self.cqkm_initials.clone();
+      self.cqkm_initials = pinyin_initials
+        .iter()
+        .filter_map(|initial| match *initial {
+          "sh" => Some('u'),
+          "zh" => Some('i'),
+          "ch" => Some('o'),
+          _ => initial.chars().next(),
+        })
+        .map(|c| c.to_string())
+        .filter(|s| initials.contains(s))
+        .collect();
+
       let mut new_initials = vec![];
       for initial in self.cqkm_initials.iter() {
         let xh = xhs.keys().find(|xh| xh.starts_with(initial));
@@ -699,6 +714,11 @@ fn get_hanzis(
         .flatten()
         .flat_map(|m| m.into_iter().map(|p| pinyin_ascii(p.with_tone_num_end())))
         .collect();
+
+      // let pinyin: String = zh.as_str()
+      //   .to_pinyin()
+      //   .flat_map(|p| p.map(|p| p.with_tone_num_end()))
+      //   .collect();
 
       if pinyins.is_empty() {
         return None;
