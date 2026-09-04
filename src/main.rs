@@ -66,70 +66,71 @@ fn main() -> io::Result<()> {
     .iter_mut()
     .for_each(|h| h.apply_custom_layout(&cj5_layout, &initial_layout, &form_layout));
 
-  for key in "qwertyuiopasdfghjkl;zxc.b,mnv".split("") {
-    let found = hans.iter().find(|z| z.cj5.iter().any(|s| s == key));
-    if let Some(z) = found {
-      println!("{}: {}", key, z.zh);
-    }
-  }
+  // for key in "qwertyuiopasdfghjkl;zxc.b,mnv".split("") {
+  //   let found = hans.iter().find(|z| z.cj5.iter().any(|s| s == key));
+  //   if let Some(z) = found {
+  //     println!("{}: {}", key, z.zh);
+  //   }
+  // }
 
-  run_stat(&hans);
+  // run_stat(&hans);
 
-  let words_json: String = read_to_string("json/cqkm-word.json")?;
-  let words: Vec<CqkmWord> = serde_json::from_str(&words_json)?;
-  let mut words_counter: HashMap<char, u64> = HashMap::new();
-  count_map(&mut words_counter, &words, |w| w.zh.chars());
+  // let words_json: String = read_to_string("json/cqkm-word.json")?;
+  // let words: Vec<CqkmWord> = serde_json::from_str(&words_json)?;
+  // let mut words_counter: HashMap<char, u64> = HashMap::new();
+  // count_map(&mut words_counter, &words, |w| w.zh.chars());
 
-  println!("\n\n-----run_stat_weighted-------");
-  run_stat_weighted(&hans, &words_counter);
+  // println!("\n\n-----run_stat_weighted-------");
+  // run_stat_weighted(&hans, &words_counter);
 
   // return Ok(());
 
-  let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.codes()).collect();
+  // let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.codes()).collect();
+  let mut codes: Vec<Code> = hans.iter().flat_map(|z| z.cqkm_xy_codes()).collect();
 
-  let s = read_to_string("json/cqkm-char-shortcuts.json")?;
-  let shortcuts: Vec<CqkmWord> = serde_json::from_str(&s)?;
-  dbg!(shortcuts.len());
+  // let s = read_to_string("json/cqkm-char-shortcuts.json")?;
+  // let shortcuts: Vec<CqkmWord> = serde_json::from_str(&s)?;
+  // dbg!(shortcuts.len());
 
-  let xhs = xhs_map(&initial_layout);
-  let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
-  let initial_mapper = hashmap_reverse(&initial_layout);
+  // let xhs = xhs_map(&initial_layout);
+  // let hanm: HashMap<&String, &Hanzi> = hans.iter().map(|z| (&z.zh, z)).collect();
+  // let initial_mapper = hashmap_reverse(&initial_layout);
 
-  let initial_mapped = |original: &str| {
-    original.chars()
-      .filter_map(|c| initial_mapper.get(&c))
-      .collect::<String>()
-  };
+  // let initial_mapped = |original: &str| {
+  //   original.chars()
+  //     .filter_map(|c| initial_mapper.get(&c))
+  //     .collect::<String>()
+  // };
 
-  for short in shortcuts {
-    let initial = &short.spell[0..1];
-    let code = if "zcs".contains(initial) {
-      let xh = format!("{initial}h");
-      if hanm
-        .get(&short.zh)
-        .map(|z| z.pinyins.iter().any(|p| p.starts_with(&xh)))
-        .unwrap_or(false)
-      {
-        format!("{}{}", xhs.get(xh.as_str()).unwrap(), &short.spell[1..])
-      } else {
-        initial_mapped(&short.spell)
-      }
-    } else {
-      initial_mapped(&short.spell)
-    };
+  // for short in shortcuts {
+  //   let initial = &short.spell[0..1];
+  //   let code = if "zcs".contains(initial) {
+  //     let xh = format!("{initial}h");
+  //     if hanm
+  //       .get(&short.zh)
+  //       .map(|z| z.pinyins.iter().any(|p| p.starts_with(&xh)))
+  //       .unwrap_or(false)
+  //     {
+  //       format!("{}{}", xhs.get(xh.as_str()).unwrap(), &short.spell[1..])
+  //     } else {
+  //       initial_mapped(&short.spell)
+  //     }
+  //   } else {
+  //     initial_mapped(&short.spell)
+  //   };
 
-    codes.push(Code {
-      zh: short.zh,
-      code,
-      schema: "cqkm".to_string(),
-      nth: 0,
-    });
-  }
+  //   codes.push(Code {
+  //     zh: short.zh,
+  //     code,
+  //     schema: "cqkm".to_string(),
+  //     nth: 0,
+  //   });
+  // }
 
   codes.sort();
 
-  json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
-  json_array_write("json/Cangjie5_special_codes_custom.json", &codes)?;
+  // json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
+  json_array_write("json/Cangjie5_special_codes_cqkmxy.json", &codes)?;
 
   Ok(())
 }
@@ -335,6 +336,7 @@ impl Code {
 impl Ord for Code {
   fn cmp(&self, other: &Self) -> Ordering {
     [
+      self.schema.cmp(&other.schema),
       self.code.cmp(&other.code),
       self.zh.cmp(&other.zh),
       self.nth.cmp(&other.nth),
@@ -481,6 +483,35 @@ impl Hanzi {
           code: format!("{i}{form}"),
           schema: "cqkm".to_string(),
           nth: 0,
+        })
+        .collect();
+
+      codes.append(&mut cqkm);
+    }
+
+    codes
+  }
+
+  fn cqkm_xy_codes(&self) -> Vec<Code> {
+    let mut codes = vec![];
+    if let Some(form) = &self.cqkm_form {
+      // let mut cs: Vec<char> = form.chars().collect();
+      // let (left, right) = cs.split_at(2);
+      let mut cqkm = self
+        .cqkm_initials
+        .iter()
+        .filter_map(|i| {
+          let code = format!("{form}{i}");
+          if code.len() < 4 {
+            return None;
+          }
+          Some(Code {
+            zh: self.zh.to_string(),
+            code,
+            // code: format!("{}{i}{}", left.iter().collect::<String>(), right.iter().collect::<String>()),
+            schema: "cqkmxy".to_string(),
+            nth: 0,
+          })
         })
         .collect();
 
