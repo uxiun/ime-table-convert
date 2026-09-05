@@ -47,7 +47,10 @@ fn to_char_dict(char_pairs_str: &str) -> HashMap<char, char> {
 fn main() {
   // zhwords_json("json/cqkm-word.json", "json/cqkm-word-array.json");
 
-  main_json();
+  main_json(
+    "json/cj5_7w_overwrote_cqkm_initials_hans.json",
+    "json/cj5_7w_overwrote_cqkm_initials_codes.json",
+  );
 }
 
 fn zhwords_json<P: AsRef<Path>>(src_path: P, json_path: P) -> io::Result<()> {
@@ -62,16 +65,25 @@ fn zhwords_json<P: AsRef<Path>>(src_path: P, json_path: P) -> io::Result<()> {
   fs::write(json_path, s)
 }
 
-fn main_json() -> io::Result<()> {
+fn main_json<P: AsRef<Path>>(
+  path_hans: P,
+  path_codes: P,
+) -> io::Result<()> {
   let res = get_hanzis(
     &["json/cqkm-char.json", "json/cqkm-char-extra.json"],
-    &[("Cangjie5/Cangjie5_special.txt", false)],
+    &[
+      ("Cangjie5/Cangjie5_special.txt", false),
+      ("yong/cj5-supplement.txt", true),
+      ("yong/cj5-70000.txt", true),
+    ],
   );
 
   if let Err(e) = &res {
     println!("{}", e)
   }
   let mut hans = res.unwrap();
+  dbg!(hans.iter().find(|h| h.zh == "〇"));
+
   dbg!(hans.len());
   let cqkm_count = hans.iter().filter(|z| z.cqkm_form.is_some()).count();
   dbg!(cqkm_count);
@@ -79,12 +91,17 @@ fn main_json() -> io::Result<()> {
   // check
   for h in hans.iter() {
     match &h.cqkm_form {
-      Some(form) => if form.is_empty() {
-        println!("{}: cqkm_form empty! initials: {:?}", h.zh, h.cqkm_initials);
-      },
+      Some(form) => {
+        if form.is_empty() {
+          println!("{}: cqkm_form empty! initials: {:?}", h.zh, h.cqkm_initials);
+        }
+      }
       None => {
         if !h.cqkm_initials.is_empty() {
-          println!("{}: cqkm_initials is {:?}, but cqkm_form None!", h.zh, h.cqkm_initials);
+          println!(
+            "{}: cqkm_initials is {:?}, but cqkm_form None!",
+            h.zh, h.cqkm_initials
+          );
         }
       }
     }
@@ -101,7 +118,6 @@ fn main_json() -> io::Result<()> {
   hans
     .iter_mut()
     .for_each(|h| h.apply_custom_layout(&cj5_layout, &initial_layout, &form_layout));
-
 
   // for key in "qwertyuiopasdfghjkl;zxc.b,mnv".split("") {
   //   let found = hans.iter().find(|z| z.cj5.iter().any(|s| s == key));
@@ -195,9 +211,9 @@ fn main_json() -> io::Result<()> {
 
   codes.sort();
 
-  json_array_write("json/Cangjie5_special_hans_overwrote_initials.json", &hans)?;
+  json_array_write(path_hans, &hans)?;
   json_array_write(
-    "json/Cangjie5_special_codes_overwrote_initials.json",
+    path_codes,
     &codes,
   )?;
 
@@ -345,7 +361,7 @@ fn xhs_map(initial_layout: &HashMap<char, char>) -> HashMap<&str, char> {
     .collect()
 }
 
-fn json_array_write<T: Serialize>(path: &str, items: &[T]) -> io::Result<()> {
+fn json_array_write<T: Serialize, P: AsRef<Path>>(path: P, items: &[T]) -> io::Result<()> {
   let f = OpenOptions::new()
     .create(true)
     .truncate(true)
@@ -674,9 +690,9 @@ impl Hanzi {
     // }
 
     cqkm_initials = initials
-        .iter()
-        .map(|i| xhs.get(i).unwrap_or(i).to_string())
-        .collect();
+      .iter()
+      .map(|i| xhs.get(i).unwrap_or(i).to_string())
+      .collect();
 
     let mut deduped: Vec<String> = vec![];
     for i in cqkm_initials {
@@ -769,7 +785,7 @@ impl Hanzi {
 
 fn get_hanzis(
   paths_cqkm_char: &[&'static str],
-  paths_cj5_yong_is_code_left: &[(&'static str, bool)],
+  paths_cj5_yong_is_code_right: &[(&'static str, bool)],
 ) -> Result<Vec<Hanzi>, Box<dyn std::error::Error>> {
   let mut chars_cqkm: Vec<CqkmChar> = vec![];
   for path in paths_cqkm_char {
@@ -780,7 +796,7 @@ fn get_hanzis(
   let cqkm: HashMap<String, CqkmChar> = chars_cqkm.into_iter().map(|c| (c.zh.clone(), c)).collect();
 
   let mut cj5def: HashMap<String, Vec<String>> = HashMap::new();
-  for (path, is_code_left) in paths_cj5_yong_is_code_left {
+  for (path, is_code_left) in paths_cj5_yong_is_code_right {
     let s = fs::read_to_string(path)?;
     for line in s.lines() {
       let seps: Vec<&str> = line.split_whitespace().collect();
@@ -805,6 +821,19 @@ fn get_hanzis(
     }
   }
 
+  let mut cqkm_not_has_cj5def: Vec<String> = cqkm
+    .iter()
+    .filter_map(|(zh, _)| {
+      if cj5def.get(zh).is_some() {
+        None
+      } else {
+        Some(zh.to_string())
+      }
+    })
+    .collect();
+
+  dbg!(&cqkm_not_has_cj5def);
+
   println!("cj5def.len={}", cj5def.len());
 
   let mut hanzis: Vec<Hanzi> = cj5def
@@ -825,6 +854,10 @@ fn get_hanzis(
       //   .to_pinyin()
       //   .flat_map(|p| p.map(|p| p.with_tone_num_end()))
       //   .collect();
+
+      if zh.as_str() == "〇" {
+        dbg!(&pinyins);
+      }
 
       if pinyins.is_empty() {
         return None;
