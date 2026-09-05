@@ -44,12 +44,18 @@ fn to_char_dict(char_pairs_str: &str) -> HashMap<char, char> {
 }
 
 fn main() {
-  zhwords_json("json/cqkm-word-array.json");
+  zhwords_json("json/cqkm-word.json", "json/cqkm-word-array.json");
 }
 
-fn zhwords_json<P: AsRef<Path>>(json_path: P) -> io::Result<()> {
-  let words = getZh("json/cqkm-word.json")?;
-  let s = serde_json::to_string(&words)?;
+fn zhwords_json<P: AsRef<Path>>(src_path: P, json_path: P) -> io::Result<()> {
+  let s = read_to_string(src_path)?;
+  let value: Value = serde_json::from_str(&s)?;
+  let v = match value {
+    Value::Array(items) => items.into_iter().map(|item| item["zh"].clone()).collect(),
+    _ => vec![],
+  };
+
+  let s = serde_json::to_string(&v)?;
   fs::write(json_path, s)
 }
 
@@ -759,18 +765,4 @@ fn get_hanzis(
 
   hanzis.sort();
   Ok(hanzis)
-}
-
-fn getZh<P: AsRef<Path>>(path: P) -> io::Result<Vec<String>> {
-  let s = read_to_string(path)?;
-  let value: Value = serde_json::from_str(&s)?;
-  let v = match value {
-    Value::Array(items) => items
-      .into_iter()
-      .map(|item| item["zh"].to_string())
-      .collect(),
-    _ => vec![],
-  };
-
-  Ok(v)
 }
