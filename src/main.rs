@@ -18,6 +18,7 @@ const CQKM_FORM_LAYOUT: &str = "
   zq xr cw .e  bt ,x mo nl vs
 ";
 
+// ou の o と ch の o が合流
 const CQKM_INITIAL_LAYOUT: &str = "
   wp eb rf tm    yy ux ij oq
   st dd fl gn    hr ju ki lo
@@ -44,7 +45,9 @@ fn to_char_dict(char_pairs_str: &str) -> HashMap<char, char> {
 }
 
 fn main() {
-  zhwords_json("json/cqkm-word.json", "json/cqkm-word-array.json");
+  // zhwords_json("json/cqkm-word.json", "json/cqkm-word-array.json");
+
+  main_json();
 }
 
 fn zhwords_json<P: AsRef<Path>>(src_path: P, json_path: P) -> io::Result<()> {
@@ -79,7 +82,8 @@ fn main_json() -> io::Result<()> {
 
   hans
     .iter_mut()
-    .for_each(|z| z.fill_cqkm_initials(&initial_layout));
+    // .for_each(|z| z.fill_cqkm_initials(&initial_layout));
+    .for_each(|z| z.overwrite_cqkm_initials(&initial_layout));
   hans
     .iter_mut()
     .for_each(|h| h.apply_custom_layout(&cj5_layout, &initial_layout, &form_layout));
@@ -176,8 +180,11 @@ fn main_json() -> io::Result<()> {
 
   codes.sort();
 
-  json_array_write("json/Cangjie5_special_hans_custom.json", &hans)?;
-  json_array_write("json/Cangjie5_special_codes_cqkmxy.json", &codes)?;
+  json_array_write("json/Cangjie5_special_hans_overwrote_initials.json", &hans)?;
+  json_array_write(
+    "json/Cangjie5_special_codes_overwrote_initials.json",
+    &codes,
+  )?;
 
   Ok(())
 }
@@ -603,6 +610,72 @@ impl Hanzi {
 
   //   Ok(())
   // }
+
+  fn overwrite_cqkm_initials(&mut self, initial_layout: &HashMap<char, char>) {
+    let xhs: HashMap<&str, &str> = XHS.into_iter().collect();
+
+    let initials = self
+      .pinyins
+      .iter()
+      .map(|p| {
+        if xhs.keys().any(|pat| p.starts_with(pat)) {
+          &p[0..2]
+        } else {
+          &p[0..1]
+        }
+      })
+      // .map(|i| xhs.get(i).unwrap_or(&i).to_string())
+      .collect::<Vec<_>>();
+
+    let mut cqkm_initials: Vec<String> = vec![];
+
+    // if self.cqkm_initials.is_empty() {
+    //   cqkm_initials = initials
+    //     .iter()
+    //     .map(|i| xhs.get(i).unwrap_or(i).to_string())
+    //     .collect();
+    // } else {
+    //   for i in self.cqkm_initials.iter() {
+    //     if "zcs".contains(i) {
+    //       if initials.contains(&i.as_str()) {
+    //         cqkm_initials.push(i.to_string());
+    //       } else {
+    //         let xh = format!("{i}h");
+    //         if initials.contains(&xh.as_str()) {
+    //           cqkm_initials.push(xhs.get(&xh.as_str()).unwrap().to_string());
+    //         }
+    //       }
+    //     } else {
+    //       cqkm_initials.push(i.clone());
+    //     }
+    //   }
+    // }
+
+    // if cqkm_initials.is_empty() {
+    //   cqkm_initials = initials
+    //     .iter()
+    //     .map(|i| xhs.get(i).unwrap_or(i).to_string())
+    //     .collect();
+    // }
+
+    cqkm_initials = initials
+        .iter()
+        .map(|i| xhs.get(i).unwrap_or(i).to_string())
+        .collect();
+
+    let mut deduped: Vec<String> = vec![];
+    for i in cqkm_initials {
+      if !deduped.contains(&i) {
+        deduped.push(i)
+      }
+    }
+
+    self.cqkm_initials = deduped;
+
+    if self.zh.as_str() == "行" {
+      dbg!(self);
+    }
+  }
 
   fn fill_cqkm_initials(&mut self, initial_layout: &HashMap<char, char>) {
     // let xhs = xhs_map(initial_layout);
