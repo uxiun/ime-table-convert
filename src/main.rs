@@ -4,11 +4,13 @@ use std::{
   fs::{self, OpenOptions, read_to_string},
   hash::Hash,
   io::{self, BufWriter, Write},
+  path::Path,
 };
 
 use ime_table_convert::hashmap_reverse;
 use pinyin::{ToPinyin, ToPinyinMulti};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 const CQKM_FORM_LAYOUT: &str = "
   wa em rp tn     yb uy ih og
@@ -41,7 +43,17 @@ fn to_char_dict(char_pairs_str: &str) -> HashMap<char, char> {
     .collect()
 }
 
-fn main() -> io::Result<()> {
+fn main() {
+  zhwords_json("json/cqkm-word-array.json");
+}
+
+fn zhwords_json<P: AsRef<Path>>(json_path: P) -> io::Result<()> {
+  let words = getZh("json/cqkm-word.json")?;
+  let s = serde_json::to_string(&words)?;
+  fs::write(json_path, s)
+}
+
+fn main_json() -> io::Result<()> {
   let res = get_hanzis(
     &["json/cqkm-char.json", "json/cqkm-char-extra.json"],
     &[("Cangjie5/Cangjie5_special.txt", false)],
@@ -747,4 +759,18 @@ fn get_hanzis(
 
   hanzis.sort();
   Ok(hanzis)
+}
+
+fn getZh<P: AsRef<Path>>(path: P) -> io::Result<Vec<String>> {
+  let s = read_to_string(path)?;
+  let value: Value = serde_json::from_str(&s)?;
+  let v = match value {
+    Value::Array(items) => items
+      .into_iter()
+      .map(|item| item["zh"].to_string())
+      .collect(),
+    _ => vec![],
+  };
+
+  Ok(v)
 }
