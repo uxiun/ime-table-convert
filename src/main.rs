@@ -76,6 +76,20 @@ fn main_json() -> io::Result<()> {
   let cqkm_count = hans.iter().filter(|z| z.cqkm_form.is_some()).count();
   dbg!(cqkm_count);
 
+  // check
+  for h in hans.iter() {
+    match &h.cqkm_form {
+      Some(form) => if form.is_empty() {
+        println!("{}: cqkm_form empty! initials: {:?}", h.zh, h.cqkm_initials);
+      },
+      None => {
+        if !h.cqkm_initials.is_empty() {
+          println!("{}: cqkm_initials is {:?}, but cqkm_form None!", h.zh, h.cqkm_initials);
+        }
+      }
+    }
+  }
+
   let initial_layout = to_char_dict(CQKM_INITIAL_LAYOUT);
   let form_layout = to_char_dict(CQKM_FORM_LAYOUT);
   let cj5_layout = to_char_dict(CJ5_LAYOUT);
@@ -87,6 +101,7 @@ fn main_json() -> io::Result<()> {
   hans
     .iter_mut()
     .for_each(|h| h.apply_custom_layout(&cj5_layout, &initial_layout, &form_layout));
+
 
   // for key in "qwertyuiopasdfghjkl;zxc.b,mnv".split("") {
   //   let found = hans.iter().find(|z| z.cj5.iter().any(|s| s == key));

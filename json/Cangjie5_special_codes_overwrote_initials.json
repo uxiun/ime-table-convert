@@ -49808,12 +49808,12 @@
 ,{"zh":"川","code":"lzss","schema":"cqkm","nth":0}
 ,{"zh":"牊","code":"lzyo","schema":"cqkm","nth":0}
 ,{"zh":"牕","code":"lzzf","schema":"cqkm","nth":0}
-,{"zh":"以","code":"m","schema":"cqkm","nth":0}
 ,{"zh":"厶","code":"m,","schema":"cqkm","nth":0}
 ,{"zh":"厶","code":"m,,","schema":"cqkm","nth":0}
 ,{"zh":"逘","code":"m,hh","schema":"cqkm","nth":0}
 ,{"zh":"逡","code":"m,hh","schema":"cqkm","nth":0}
 ,{"zh":"參","code":"m,ib","schema":"cqkm","nth":0}
+,{"zh":"以","code":"m,ii","schema":"cqkm","nth":0}
 ,{"zh":"叁","code":"m,ik","schema":"cqkm","nth":0}
 ,{"zh":"顙","code":"m,is","schema":"cqkm","nth":0}
 ,{"zh":"颡","code":"m,is","schema":"cqkm","nth":0}
@@ -61430,7 +61430,6 @@
 ,{"zh":"鷎","code":"xzzm","schema":"cqkm","nth":0}
 ,{"zh":"鷱","code":"xzzm","schema":"cqkm","nth":0}
 ,{"zh":"一","code":"y","schema":"cqkm","nth":0}
-,{"zh":"以","code":"y","schema":"cqkm","nth":0}
 ,{"zh":"又","code":"y,","schema":"cqkm","nth":0}
 ,{"zh":"廴","code":"y,","schema":"cqkm","nth":0}
 ,{"zh":"羽","code":"y,,","schema":"cqkm","nth":0}
@@ -61448,6 +61447,7 @@
 ,{"zh":"逘","code":"y,hh","schema":"cqkm","nth":0}
 ,{"zh":"遹","code":"y,hh","schema":"cqkm","nth":0}
 ,{"zh":"预","code":"y,i","schema":"cqkm","nth":0}
+,{"zh":"以","code":"y,ii","schema":"cqkm","nth":0}
 ,{"zh":"羿","code":"y,is","schema":"cqkm","nth":0}
 ,{"zh":"預","code":"y,is","schema":"cqkm","nth":0}
 ,{"zh":"頨","code":"y,is","schema":"cqkm","nth":0}
@@ -65164,6 +65164,8 @@
 ,{"zh":"矜","code":",ifx","schema":"cqkmxy","nth":0}
 ,{"zh":"翭","code":",ihc","schema":"cqkmxy","nth":0}
 ,{"zh":"翜","code":",iij","schema":"cqkmxy","nth":0}
+,{"zh":"以","code":",iim","schema":"cqkmxy","nth":0}
+,{"zh":"以","code":",iiy","schema":"cqkmxy","nth":0}
 ,{"zh":"翟","code":",ijd","schema":"cqkmxy","nth":0}
 ,{"zh":"雡","code":",ijf","schema":"cqkmxy","nth":0}
 ,{"zh":"难","code":",ijg","schema":"cqkmxy","nth":0}
